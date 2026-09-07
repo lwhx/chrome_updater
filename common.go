@@ -182,6 +182,13 @@ func unzip(zipFile string, filterNames ...string) error {
 				}
 				defer rc.Close()
 
+				// 确保父目录存在
+				fileDir := filepath.Dir(filepath.Join(parentPath, file.Name))
+				if err := os.MkdirAll(fileDir, os.ModePerm); err != nil {
+					logger.Error("无法创建目录:", err)
+					return err
+				}
+
 				// 创建解压后的文件
 				newFile, err := os.Create(filepath.Join(parentPath, file.Name))
 				if err != nil {
@@ -196,7 +203,7 @@ func unzip(zipFile string, filterNames ...string) error {
 					logger.Error("无法解压 ZIP 文件中的内容:", err)
 					return err
 				}
-				logger.Error("解压文件:", file.Name)
+				logger.Debug("解压文件:", file.Name)
 			}
 		}
 	}
@@ -518,6 +525,69 @@ func GetFileVersion(path string) (string, error) {
 	version := syscall.UTF16ToString((*[1 << 20]uint16)(block)[:blockLen])
 	return version, nil
 }
+func GetFileDescription(path string) (string, error) {
+	p, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Get the size of the version info
+	size, _, _ := procGetFileVersionInfoSize.Call(uintptr(unsafe.Pointer(p)), 0)
+	if size == 0 {
+		return "", fmt.Errorf("failed to get version info size")
+	}
+
+	// Allocate a buffer to hold the version info
+	buffer := make([]byte, size)
+
+	// Get the version info
+	ret, _, err := procGetFileVersionInfo.Call(
+		uintptr(unsafe.Pointer(p)),
+		0,
+		uintptr(size),
+		uintptr(unsafe.Pointer(&buffer[0])),
+	)
+	if ret == 0 {
+		return "", fmt.Errorf("failed to get version info: %v", err)
+	}
+
+	// Query the VarFileInfo to find the language and code page
+	var block unsafe.Pointer
+	var blockLen uint32
+	ret, _, err = procVerQueryValue.Call(
+		uintptr(unsafe.Pointer(&buffer[0])),
+		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("\\VarFileInfo\\Translation"))),
+		uintptr(unsafe.Pointer(&block)),
+		uintptr(unsafe.Pointer(&blockLen)),
+	)
+	if ret == 0 {
+		return "", fmt.Errorf("failed to query translation value: %v", err)
+	}
+
+	translations := (*[1 << 20][2]uint16)(block)[:blockLen/4]
+	if len(translations) == 0 {
+		return "", fmt.Errorf("no translations found")
+	}
+
+	// Use the first translation found
+	langCodePage := fmt.Sprintf("%04x%04x", translations[0][0], translations[0][1])
+	subBlock := fmt.Sprintf("\\StringFileInfo\\%s\\FileDescription", langCodePage)
+
+	// Query the FileDescription value
+	ret, _, err = procVerQueryValue.Call(
+		uintptr(unsafe.Pointer(&buffer[0])),
+		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(subBlock))),
+		uintptr(unsafe.Pointer(&block)),
+		uintptr(unsafe.Pointer(&blockLen)),
+	)
+	if ret == 0 {
+		return "", fmt.Errorf("failed to query FileDescription: %v", err)
+	}
+
+	description := syscall.UTF16ToString((*[1 << 20]uint16)(block)[:blockLen])
+	return description, nil
+}
+
 func GetVersion(sd *SettingsData, fileName string) string {
 	exePath := filepath.Join(getString(sd.installPath), fileName)
 	if fileExist(exePath) {

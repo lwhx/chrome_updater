@@ -24,7 +24,7 @@ func chromePlusScreen(win fyne.Window, data *SettingsData) fyne.CanvasObject {
 	var githubReleaseMap map[string]GithubRelease
 	var versionList []string
 	chromePlusRadio := widget.NewRadioGroup([]string{
-		"Bush2021"}, func(value string) {
+		"Chrome++ Next", "ChromeGreen"}, func(value string) {
 		data.chromePlus.Set(value)
 	})
 	versionSelect := widget.NewSelect([]string{}, func(ver string) {
@@ -32,8 +32,25 @@ func chromePlusScreen(win fyne.Window, data *SettingsData) fyne.CanvasObject {
 	})
 	versionSelect.PlaceHolder = LoadString("VersionSelectPlaceHolder")
 	versionSelect.Disable()
+
+	// Auto-detect installed branch by reading version.dll FileDescription
+	if fileExist(filepath.Join(getString(data.installPath), "version.dll")) {
+		desc, err := GetFileDescription(filepath.Join(getString(data.installPath), "version.dll"))
+		if err == nil {
+			logger.Debugf("version.dll description: %s", desc)
+			if strings.Contains(desc, "ChromeGreen") {
+				data.chromePlus.Set("ChromeGreen")
+			} else {
+				data.chromePlus.Set("Chrome++ Next")
+			}
+		}
+	}
+	// Backward compatibility: old stored value "Bush2021" maps to "Chrome++ Next"
+	if getString(data.chromePlus) == "Bush2021" {
+		data.chromePlus.Set("Chrome++ Next")
+	}
 	chromePlusRadio.Selected = getString(data.chromePlus)
-	chromePlusRadio.Disable()
+	//chromePlusRadio.Disable()
 	downBtn := widget.NewButtonWithIcon(LoadString("InstallBtnLabel"), theme.DownloadIcon(), func() {
 		ov, _ := data.oldPlusVer.Get()
 		cv, _ := data.curPlusVer.Get()
@@ -149,13 +166,29 @@ func installPlus(data *SettingsData, win fyne.Window) {
 			return
 		}
 
-		UnCompress7zFilter(fileName, parentPath, sysInfo.goarch)
-		os.Rename(filepath.Join(parentPath, sysInfo.goarch, "App", "version.dll"), path.Join(parentPath, "version.dll"))
-		if !fileExist(path.Join(parentPath, "chrome++.ini")) {
-			os.Rename(filepath.Join(parentPath, sysInfo.goarch, "App", "chrome++.ini"), path.Join(parentPath, "chrome++.ini"))
+		if getString(data.chromePlus) == "ChromeGreen" {
+			unzipErr := unzip(fileName, path.Join("x64", "version.dll"))
+			if unzipErr != nil {
+				logger.Errorf("ChromeGreen 解压失败: %v", unzipErr)
+				plusDownloadError.Store(true)
+				fyne.DoAndWait(func() { plusDownloadProgress.SetValue(0) })
+				data.plusProcessStatus.Set(false)
+				data.plusBtnStatus.Set(false)
+				alertInfo("解压失败: "+unzipErr.Error(), win)
+				return
+			}
+			os.Rename(filepath.Join(parentPath, "x64", "version.dll"), path.Join(parentPath, "version.dll"))
+			os.RemoveAll(filepath.Join(parentPath, "x64"))
+			os.Remove(fileName)
+		} else {
+			UnCompress7zFilter(fileName, parentPath, sysInfo.goarch)
+			os.Rename(filepath.Join(parentPath, sysInfo.goarch, "App", "version.dll"), path.Join(parentPath, "version.dll"))
+			if !fileExist(path.Join(parentPath, "chrome++.ini")) {
+				os.Rename(filepath.Join(parentPath, sysInfo.goarch, "App", "chrome++.ini"), path.Join(parentPath, "chrome++.ini"))
+			}
+			os.Remove(fileName)
+			os.RemoveAll(filepath.Join(parentPath, sysInfo.goarch))
 		}
-		os.Remove(fileName)
-		os.RemoveAll(filepath.Join(parentPath, sysInfo.goarch))
 		fyne.DoAndWait(func() { plusDownloadProgress.SetValue(1) })
 		defer data.oldPlusVer.Set(getString(data.curPlusVer))
 		defer data.plusBtnStatus.Set(false)
@@ -189,7 +222,13 @@ func setProxy(sd *SettingsData, reqUrl string) (*http.Client, string) {
 }
 
 func getChromePlusInfo(sd *SettingsData) (map[string]GithubRelease, []string, error) {
-	apiUrl := "https://raw.githubusercontent.com/libsgh/ghapi-json-generator/output/v2/repos/Bush2021/chrome_plus/releases%3Fper_page%3D10/data.json"
+	var apiUrl string
+	switch getString(sd.chromePlus) {
+	case "ChromeGreen":
+		apiUrl = "https://raw.githubusercontent.com/libsgh/ghapi-json-generator/output/v2/repos/libsgh/chrome_green/releases%3Fper_page%3D10/data.json"
+	default: // Chrome++ Next (formerly Bush2021)
+		apiUrl = "https://raw.githubusercontent.com/libsgh/ghapi-json-generator/output/v2/repos/Bush2021/chrome_plus/releases%3Fper_page%3D10/data.json"
+	}
 	client, reqUrl := setProxy(sd, apiUrl)
 	response, err := client.Get(reqUrl)
 	if err != nil {

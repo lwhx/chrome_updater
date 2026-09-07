@@ -33,7 +33,8 @@ MarkdownMsg = """
 ---
 
 * Shuax原版已停止更新, 最终版本为**v1.5.2**, 并且原仓库已删除, 可参考[Fork分支](https://github.com/libsgh/chrome_plus).
-* [Bush2021](https://github.com/Bush2021/chrome_plus)是正在活跃更新的维护者, 且代码在Github开源.
+* [Chrome++ Next](https://github.com/Bush2021/chrome_plus)是正在活跃更新的维护者, 且代码在Github开源.
+* [ChromeGreen](https://github.com/libsgh/chrome_green)是可以在线更新的 Chrome++。
 * 请自行鉴别Chrome++的安全性, 由于Chrome++产生的各类问题自行解决.<br>"""
 BaseSettingLabel = "基础设置"
 ThemeLabel = "主题"

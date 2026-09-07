@@ -33,7 +33,8 @@ MarkdownMsg = """
 ---
 
 * The original version of Shuax has stopped updating. The final version is **v1.5.2**, and the original repo has been deleted. Please refer to [Fork branch](https://github.com/libsgh/chrome_plus).
-* [Bush2021](https://github.com/Bush2021/chrome_plus) is actively updating the maintainer, and the code is open source on GitHub.
+* [Chrome++ Next](https://github.com/Bush2021/chrome_plus) is actively updating the maintainer, and the code is open source on GitHub.
+* [ChromeGreen](https://github.com/libsgh/chrome_green) is an online-updatable Chrome++, maintained by its maintainer.
 * Please judge the security of Chrome++ by yourself, and solve common problems caused by Chrome++ by yourself."""
 BaseSettingLabel = "Base"
 ThemeLabel = "Theme"
